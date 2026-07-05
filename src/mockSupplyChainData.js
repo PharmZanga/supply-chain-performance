@@ -1,4 +1,5 @@
 import { timeliness2025Records } from "./timeliness2025Data.js";
+import { reportingStatus2025Aggregates } from "./reportingStatus2025Data.js";
 
 export const months = [
   "January", "February", "March", "April", "May", "June",
@@ -50,6 +51,10 @@ const provinces = provinceOrder
   .filter((province) => provinceDistrictMap.has(province))
   .map((province) => [province, Array.from(provinceDistrictMap.get(province)).sort()]);
 
+const reportingStatusByDistrictMonth = new Map(
+  reportingStatus2025Aggregates.map((row) => [`${row.month}|${row.province}|${row.district}`, row]),
+);
+
 const programmes = [
   ["HIV", ["Tenofovir/Lamivudine/Dolutegravir", "HIV Test Kits", "Cotrimoxazole"]],
   ["Malaria", ["Artemether Lumefantrine", "Rapid Diagnostic Tests", "Injectable Artesunate"]],
@@ -85,9 +90,9 @@ function classifyMos(mos) {
   return "Excess";
 }
 
-// Real 2025 reporting completeness and timeliness come from the converted eLMIS
-// exports in timeliness2025Data.js. Replace or extend that module when new CSV
-// or Excel extracts are available.
+// Real 2025 reporting completeness comes from reportingStatus2025Data.js, while
+// timeliness comes from timeliness2025Data.js. Replace or extend those modules
+// when new CSV or Excel extracts are available.
 export const mockRecords = [];
 
 let id = 1;
@@ -96,13 +101,14 @@ timeliness2025Records.forEach((timelinessRow, timelinessIndex) => {
   const provinceIndex = Math.max(0, provinceOrder.indexOf(province));
   const districtIndex = provinces.find(([name]) => name === province)?.[1].indexOf(district) ?? 0;
   const monthIndex = Math.max(0, months.indexOf(month));
+  const reportingStatusRow = reportingStatusByDistrictMonth.get(`${month}|${province}|${district}`);
 
   programmes.forEach(([programme, commodities], programmeIndex) => {
     commodities.forEach((commodity, commodityIndex) => {
       const level = facilityLevels[(districtIndex + programmeIndex + commodityIndex + monthIndex) % facilityLevels.length];
       const seed = id + timelinessIndex * 17 + provinceIndex * 19 + programmeIndex * 13;
       const seasonal = Math.sin((monthIndex / 12) * Math.PI * 2) * 4;
-      const reportingCompleteness = timelinessRow.reportingCompleteness;
+      const reportingCompleteness = reportingStatusRow?.reportingCompleteness ?? timelinessRow.reportingCompleteness;
       const reportingTimeliness = timelinessRow.reportingTimeliness;
       const availability = clamp(84 + provinceIndex * 0.9 + programmeIndex * 1.2 - commodityIndex * 2.2 + seasonal + seeded(seed, 3) * 16, 48, 100);
       const mos = clamp((availability / 100) * 5.4 + seeded(seed, 4) * 4 - (commodityIndex === 2 ? 1.2 : 0), 0, 10);
@@ -127,6 +133,9 @@ timeliness2025Records.forEach((timelinessRow, timelinessIndex) => {
         reportedOnTime: timelinessRow.reportedOnTime,
         reportedLate: timelinessRow.reportedLate,
         reportedReports: timelinessRow.reported,
+        reportingStatusExpected: reportingStatusRow?.expected ?? null,
+        reportingStatusReported: reportingStatusRow?.reported ?? null,
+        nonReportingFacilities: reportingStatusRow?.nonReporting ?? 0,
         supplyingDepot: timelinessRow.supplyingDepot,
         availability,
         mos,
@@ -134,7 +143,7 @@ timeliness2025Records.forEach((timelinessRow, timelinessIndex) => {
         stockOutRate,
         orderFillRate,
         amc,
-        missingReport: timelinessRow.reported < timelinessRow.expected,
+        missingReport: (reportingStatusRow?.nonReporting ?? 0) > 0,
         duplicateRecord: seeded(seed, 8) > 0.985,
         incompleteData: availability < 58 || seeded(seed, 9) > 0.975,
         outlier: mos > 8.5 || amc > 980,

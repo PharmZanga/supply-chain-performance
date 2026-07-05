@@ -2,6 +2,7 @@ import React, { useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { mockRecords, months, navItems, stockStatuses } from "./mockSupplyChainData.js";
 import { timeliness2025Metadata } from "./timeliness2025Data.js";
+import { reportingStatus2025Metadata, reportingStatus2025NonReporting } from "./reportingStatus2025Data.js";
 import "./styles.css";
 
 const pct = (value) => `${Math.round(value)}%`;
@@ -204,11 +205,16 @@ function ExecutiveSummary({ records, setFilters, setActivePage }) {
   );
 }
 
-function ReportingPerformance({ records, setFilters }) {
+function ReportingPerformance({ records, filters, setFilters }) {
   const monthly = months.map((month) => ({ name: month.slice(0, 3), completeness: avg(records.filter((row) => row.month === month), "reportingCompleteness"), timeliness: avg(records.filter((row) => row.month === month), "reportingTimeliness") }));
   const provinces = summarize(records, "province");
   const districts = summarize(records, "district");
-  const irregular = records.filter((row) => row.reportingCompleteness < 80 || row.reportingTimeliness < 75).slice(0, 12);
+  const irregular = reportingStatus2025NonReporting.filter((row) => (
+    (filters.month === "All" || row.month === filters.month) &&
+    (filters.province === "All" || row.province === filters.province) &&
+    (filters.district === "All" || row.district === filters.district) &&
+    (filters.facilityLevel === "All" || row.facilityLevel === filters.facilityLevel)
+  )).slice(0, 20);
   const reportingUnits = new Map();
   records.forEach((row) => {
     reportingUnits.set(`${row.month}|${row.province}|${row.district}`, row);
@@ -216,12 +222,16 @@ function ReportingPerformance({ records, setFilters }) {
   const sourceRows = Array.from(reportingUnits.values());
   const expectedReports = sourceRows.reduce((sum, row) => sum + (row.expectedReports || 0), 0);
   const onTimeReports = sourceRows.reduce((sum, row) => sum + (row.reportedOnTime || 0), 0);
+  const statusExpected = sourceRows.reduce((sum, row) => sum + (row.reportingStatusExpected || 0), 0);
+  const statusReported = sourceRows.reduce((sum, row) => sum + (row.reportingStatusReported || 0), 0);
+  const statusNonReporting = sourceRows.reduce((sum, row) => sum + (row.nonReportingFacilities || 0), 0);
   return (
     <>
       <section className="source-note">
-        <strong>2025 timeliness source loaded:</strong>
-        <span>{timeliness2025Metadata.recordCount.toLocaleString()} district-month rows from {timeliness2025Metadata.files.length} monthly eLMIS exports, covering {timeliness2025Metadata.districtCount} districts.</span>
-        <span>{onTimeReports.toLocaleString()} on-time reports out of {expectedReports.toLocaleString()} expected reports in the current filter.</span>
+        <strong>2025 reporting sources loaded:</strong>
+        <span>{reportingStatus2025Metadata.recordCount.toLocaleString()} facility status rows and {timeliness2025Metadata.recordCount.toLocaleString()} timeliness rows across {reportingStatus2025Metadata.districtCount} districts.</span>
+        <span>{statusReported.toLocaleString()} reported facilities out of {statusExpected.toLocaleString()} expected; {statusNonReporting.toLocaleString()} non-reporting in current filter.</span>
+        <span>{onTimeReports.toLocaleString()} on-time reports out of {expectedReports.toLocaleString()} expected timeliness reports.</span>
       </section>
       <section className="dashboard-grid halves">
         <Panel title="Completeness and Timeliness by Month" subtitle="January to December 2025">
@@ -234,7 +244,7 @@ function ReportingPerformance({ records, setFilters }) {
       <Panel title="Province to District Drilldown" subtitle="Select a province bar to filter the dashboard">
         <BarChart data={provinces} valueKey="reportingCompleteness" onSelect={(item) => setFilters((current) => ({ ...current, province: item.name, district: "All" }))} />
       </Panel>
-      <DataTable title="Non-reporting or Irregular Reporting Facilities" rows={irregular} columns={["province", "district", "facility", "facilityLevel", "month", "reportingCompleteness", "reportingTimeliness"]} />
+      <DataTable title="Non-reporting Facilities from Reporting Status" rows={irregular} columns={["province", "district", "facilityCode", "facility", "facilityLevel", "programme", "month", "status"]} />
       <DataTable title="District Reporting Ranking" rows={districts.slice(0, 12)} columns={["name", "reportingCompleteness", "reportingTimeliness", "records"]} />
     </>
   );
