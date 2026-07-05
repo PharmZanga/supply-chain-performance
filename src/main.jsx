@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { mockRecords, months, navItems, stockStatuses } from "./mockSupplyChainData";
+import { mockRecords, months, navItems, stockStatuses } from "./mockSupplyChainData.js";
+import { timeliness2025Metadata } from "./timeliness2025Data.js";
 import "./styles.css";
 
 const pct = (value) => `${Math.round(value)}%`;
@@ -208,8 +209,20 @@ function ReportingPerformance({ records, setFilters }) {
   const provinces = summarize(records, "province");
   const districts = summarize(records, "district");
   const irregular = records.filter((row) => row.reportingCompleteness < 80 || row.reportingTimeliness < 75).slice(0, 12);
+  const reportingUnits = new Map();
+  records.forEach((row) => {
+    reportingUnits.set(`${row.month}|${row.province}|${row.district}`, row);
+  });
+  const sourceRows = Array.from(reportingUnits.values());
+  const expectedReports = sourceRows.reduce((sum, row) => sum + (row.expectedReports || 0), 0);
+  const onTimeReports = sourceRows.reduce((sum, row) => sum + (row.reportedOnTime || 0), 0);
   return (
     <>
+      <section className="source-note">
+        <strong>2025 timeliness source loaded:</strong>
+        <span>{timeliness2025Metadata.recordCount.toLocaleString()} district-month rows from {timeliness2025Metadata.files.length} monthly eLMIS exports, covering {timeliness2025Metadata.districtCount} districts.</span>
+        <span>{onTimeReports.toLocaleString()} on-time reports out of {expectedReports.toLocaleString()} expected reports in the current filter.</span>
+      </section>
       <section className="dashboard-grid halves">
         <Panel title="Completeness and Timeliness by Month" subtitle="January to December 2025">
           <LineChart data={monthly} series={[{ key: "completeness", label: "Completeness", color: "#0d7a53" }, { key: "timeliness", label: "Timeliness", color: "#c58a00" }]} />

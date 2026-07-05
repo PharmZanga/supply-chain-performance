@@ -222,6 +222,29 @@ select {
   color: #172033;
 }
 
+.source-note {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+  padding: 12px 14px;
+  border: 1px solid #cfe2f0;
+  border-left: 5px solid var(--navy);
+  border-radius: 8px;
+  background: #f7fbff;
+  color: #344559;
+  font-size: 0.9rem;
+}
+
+.source-note strong {
+  color: var(--navy);
+}
+
+.source-note span {
+  line-height: 1.4;
+}
+
 .kpi-grid {
   display: grid;
   grid-template-columns: repeat(6, minmax(150px, 1fr));
