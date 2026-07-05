@@ -106,18 +106,19 @@ function App() {
 
       <main className="content">
         <header className="topbar">
-          <div className="hero-copy">
-            <div className="logo-strip" aria-label="Institutional logos">
-              <LogoBadge initials="MOH" title="Republic of Zambia" name="Ministry of Health" />
-              <LogoBadge initials="NSCCU" title="National Supply Chain" name="Coordinating Unit" />
-            </div>
-            <p className="eyebrow">National dashboard | 2025</p>
-            <h2>{activePage}</h2>
-            <p className="hero-summary">Public health logistics performance for medicines, vaccines, reporting, stock status, and commodity availability.</p>
+          <div className="identity-band" role="img" aria-label="Republic of Zambia Ministry of Health and National Supply Chain Coordinating Unit logos">
+            <span>Republic of Zambia Ministry of Health | National Supply Chain Coordinating Unit</span>
           </div>
-          <div className="topbar-metrics">
-            <span>{records.length.toLocaleString()} records</span>
-            <span>{pct(avg(records, "availability"))} availability</span>
+          <div className="hero-row">
+            <div className="hero-copy">
+              <p className="eyebrow">National dashboard | 2025</p>
+              <h2>{activePage}</h2>
+              <p className="hero-summary">Public health logistics performance for medicines, vaccines, reporting, stock status, and commodity availability.</p>
+            </div>
+            <div className="topbar-metrics">
+              <span>{records.length.toLocaleString()} records</span>
+              <span>{pct(avg(records, "availability"))} availability</span>
+            </div>
           </div>
         </header>
 
@@ -154,18 +155,6 @@ function Select({ label, value, options, onChange }) {
         {options.map((option) => <option key={option} value={option}>{option}</option>)}
       </select>
     </label>
-  );
-}
-
-function LogoBadge({ initials, title, name }) {
-  return (
-    <div className="logo-badge">
-      <span>{initials}</span>
-      <div>
-        <strong>{title}</strong>
-        <small>{name}</small>
-      </div>
-    </div>
   );
 }
 
