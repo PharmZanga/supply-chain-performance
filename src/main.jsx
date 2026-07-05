@@ -3,11 +3,15 @@ import { createRoot } from "react-dom/client";
 import { mockRecords, months, navItems, stockStatuses } from "./mockSupplyChainData.js";
 import { timeliness2025Metadata } from "./timeliness2025Data.js";
 import { reportingStatus2025Metadata, reportingStatus2025NonReporting } from "./reportingStatus2025Data.js";
+import { orderFillRate2025LowFillItems, orderFillRate2025Metadata } from "./orderFillRate2025Data.js";
 import "./styles.css";
 
 const pct = (value) => `${Math.round(value)}%`;
 const oneDec = (value) => Number(value).toFixed(1);
-const avg = (items, key) => (items.length ? items.reduce((sum, row) => sum + row[key], 0) / items.length : 0);
+const avg = (items, key) => {
+  const values = items.map((row) => row[key]).filter((value) => typeof value === "number" && Number.isFinite(value));
+  return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
+};
 
 function unique(records, key) {
   return Array.from(new Set(records.map((row) => row[key]))).sort();
@@ -172,6 +176,7 @@ function KpiCard({ label, value, detail, tone = "neutral" }) {
 }
 
 function KpiGrid({ records }) {
+  const hasOrderFill = records.some((row) => typeof row.orderFillRate === "number" && Number.isFinite(row.orderFillRate));
   return (
     <section className="kpi-grid">
       <KpiCard label="Reporting Completeness" value={pct(avg(records, "reportingCompleteness"))} detail="National average" tone="good" />
@@ -179,7 +184,7 @@ function KpiGrid({ records }) {
       <KpiCard label="Commodity Availability" value={pct(avg(records, "availability"))} detail="Tracer items available" tone={avg(records, "availability") >= 90 ? "good" : "warn"} />
       <KpiCard label="Average MOS" value={oneDec(avg(records, "mos"))} detail="Months of stock" />
       <KpiCard label="Stock-out Rate" value={pct(avg(records, "stockOutRate"))} detail="Facilities with zero balance" tone={avg(records, "stockOutRate") > 10 ? "danger" : "good"} />
-      <KpiCard label="Order Fill Rate" value={pct(avg(records, "orderFillRate"))} detail="Where order data exists" />
+      <KpiCard label="Order Fill Rate" value={hasOrderFill ? pct(avg(records, "orderFillRate")) : "N/A"} detail="Where order data exists" />
     </section>
   );
 }
@@ -359,14 +364,27 @@ function ProvincialPerformance({ records, setFilters }) {
   );
 }
 
-function ProgrammePerformance({ records }) {
+function ProgrammePerformance({ records, filters }) {
   const rows = summarize(records, "programme");
+  const lowFillItems = orderFillRate2025LowFillItems.filter((row) => (
+    (filters.month === "All" || row.month === filters.month) &&
+    (filters.province === "All" || row.province === filters.province) &&
+    (filters.district === "All" || row.district === filters.district) &&
+    (filters.programme === "All" || row.programme === filters.programme) &&
+    (filters.commodity === "All" || row.productName === filters.commodity)
+  )).slice(0, 20);
   return (
     <>
+      <section className="source-note">
+        <strong>2025 order fill-rate source loaded:</strong>
+        <span>{orderFillRate2025Metadata.recordCount.toLocaleString()} order lines from {orderFillRate2025Metadata.files.length} monthly exports, covering {orderFillRate2025Metadata.facilityCount} facilities and {orderFillRate2025Metadata.productCount} products.</span>
+        <span>Weighted order fill rate: {pct(orderFillRate2025Metadata.orderFillRate)} from {Math.round(orderFillRate2025Metadata.shippedQuantity).toLocaleString()} shipped out of {Math.round(orderFillRate2025Metadata.orderedQuantity).toLocaleString()} ordered.</span>
+      </section>
       <Panel title="Programme Composite Score" subtitle="Programme comparison across core supply chain indicators">
         <BarChart data={rows} valueKey="score" />
       </Panel>
-      <DataTable title="Programme Performance Matrix" rows={rows} columns={["name", "availability", "mos", "stockOutRate", "amc", "reportingCompleteness", "reportingTimeliness"]} />
+      <DataTable title="Programme Performance Matrix" rows={rows} columns={["name", "availability", "mos", "stockOutRate", "orderFillRate", "amc", "reportingCompleteness", "reportingTimeliness"]} />
+      <DataTable title="Low Order Fill Items from Source Data" rows={lowFillItems} columns={["province", "district", "facility", "productCode", "productName", "orderedQuantity", "shippedQuantity", "itemFillRate"]} />
     </>
   );
 }

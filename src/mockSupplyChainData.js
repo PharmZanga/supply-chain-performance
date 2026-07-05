@@ -1,5 +1,6 @@
 import { timeliness2025Records } from "./timeliness2025Data.js";
 import { reportingStatus2025Aggregates } from "./reportingStatus2025Data.js";
+import { orderFillRate2025Aggregates } from "./orderFillRate2025Data.js";
 
 export const months = [
   "January", "February", "March", "April", "May", "June",
@@ -55,6 +56,10 @@ const reportingStatusByDistrictMonth = new Map(
   reportingStatus2025Aggregates.map((row) => [`${row.month}|${row.province}|${row.district}`, row]),
 );
 
+const orderFillRateByDistrictMonth = new Map(
+  orderFillRate2025Aggregates.map((row) => [`${row.month}|${row.province}|${row.district}`, row]),
+);
+
 const programmes = [
   ["HIV", ["Tenofovir/Lamivudine/Dolutegravir", "HIV Test Kits", "Cotrimoxazole"]],
   ["Malaria", ["Artemether Lumefantrine", "Rapid Diagnostic Tests", "Injectable Artesunate"]],
@@ -90,9 +95,9 @@ function classifyMos(mos) {
   return "Excess";
 }
 
-// Real 2025 reporting completeness comes from reportingStatus2025Data.js, while
-// timeliness comes from timeliness2025Data.js. Replace or extend those modules
-// when new CSV or Excel extracts are available.
+// Real 2025 reporting completeness, timeliness, and order fill rate come from
+// the converted source modules. Replace or extend those modules when new CSV or
+// Excel extracts are available.
 export const mockRecords = [];
 
 let id = 1;
@@ -102,6 +107,7 @@ timeliness2025Records.forEach((timelinessRow, timelinessIndex) => {
   const districtIndex = provinces.find(([name]) => name === province)?.[1].indexOf(district) ?? 0;
   const monthIndex = Math.max(0, months.indexOf(month));
   const reportingStatusRow = reportingStatusByDistrictMonth.get(`${month}|${province}|${district}`);
+  const orderFillRow = orderFillRateByDistrictMonth.get(`${month}|${province}|${district}`);
 
   programmes.forEach(([programme, commodities], programmeIndex) => {
     commodities.forEach((commodity, commodityIndex) => {
@@ -114,7 +120,8 @@ timeliness2025Records.forEach((timelinessRow, timelinessIndex) => {
       const mos = clamp((availability / 100) * 5.4 + seeded(seed, 4) * 4 - (commodityIndex === 2 ? 1.2 : 0), 0, 10);
       const stockStatus = classifyMos(mos);
       const stockOutRate = stockStatus === "Stock-out" ? 100 : clamp(18 - availability / 8 + seeded(seed, 5) * 10, 0, 45);
-      const orderFillRate = clamp(availability - 4 + seeded(seed, 6) * 13, 45, 100);
+      const orderFillRate = orderFillRow?.orderFillRate ?? null;
+      const modeledOrderFillRate = clamp(availability - 4 + seeded(seed, 6) * 13, 45, 100);
       const amc = Math.round(120 + programmeIndex * 180 + commodityIndex * 85 + provinceIndex * 22 + seeded(seed, 7) * 420);
 
       mockRecords.push({
@@ -142,6 +149,11 @@ timeliness2025Records.forEach((timelinessRow, timelinessIndex) => {
         stockStatus,
         stockOutRate,
         orderFillRate,
+        modeledOrderFillRate,
+        orderedQuantity: orderFillRow?.orderedQuantity ?? null,
+        shippedQuantity: orderFillRow?.shippedQuantity ?? null,
+        orderLineItems: orderFillRow?.lineItems ?? 0,
+        zeroFillItems: orderFillRow?.zeroFillItems ?? 0,
         amc,
         missingReport: (reportingStatusRow?.nonReporting ?? 0) > 0,
         duplicateRecord: seeded(seed, 8) > 0.985,
