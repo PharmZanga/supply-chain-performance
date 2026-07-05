@@ -106,9 +106,14 @@ function App() {
 
       <main className="content">
         <header className="topbar">
-          <div>
+          <div className="hero-copy">
+            <div className="logo-strip" aria-label="Institutional logos">
+              <LogoBadge initials="MOH" title="Republic of Zambia" name="Ministry of Health" />
+              <LogoBadge initials="NSCCU" title="National Supply Chain" name="Coordinating Unit" />
+            </div>
             <p className="eyebrow">National dashboard | 2025</p>
             <h2>{activePage}</h2>
+            <p className="hero-summary">Public health logistics performance for medicines, vaccines, reporting, stock status, and commodity availability.</p>
           </div>
           <div className="topbar-metrics">
             <span>{records.length.toLocaleString()} records</span>
@@ -149,6 +154,18 @@ function Select({ label, value, options, onChange }) {
         {options.map((option) => <option key={option} value={option}>{option}</option>)}
       </select>
     </label>
+  );
+}
+
+function LogoBadge({ initials, title, name }) {
+  return (
+    <div className="logo-badge">
+      <span>{initials}</span>
+      <div>
+        <strong>{title}</strong>
+        <small>{name}</small>
+      </div>
+    </div>
   );
 }
 
