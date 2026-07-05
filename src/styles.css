@@ -123,16 +123,28 @@ select {
 
 .identity-band {
   height: 108px;
-  background: url("/supply-chain-performance/assets/moh-nsccu-identity-band.png") center top / 100% 100% no-repeat;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 52px 12px;
+  background:
+    linear-gradient(90deg, rgba(8, 41, 76, 0.98), rgba(8, 59, 105, 0.94) 52%, rgba(10, 82, 130, 0.9)),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0));
   border-bottom: 1px solid rgba(255, 255, 255, 0.18);
 }
 
-.identity-band span {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
+.identity-band img {
+  display: block;
+  width: auto;
+  object-fit: contain;
+}
+
+.moh-logo {
+  height: 86px;
+}
+
+.nsccu-logo {
+  height: 88px;
 }
 
 .hero-row {
@@ -638,8 +650,15 @@ td {
 
   .identity-band {
     height: 82px;
-    background-size: 100% 100%;
-    background-position: center top;
+    padding: 8px 18px;
+  }
+
+  .moh-logo {
+    height: 66px;
+  }
+
+  .nsccu-logo {
+    height: 68px;
   }
 
   .hero-row {

@@ -106,8 +106,9 @@ function App() {
 
       <main className="content">
         <header className="topbar">
-          <div className="identity-band" role="img" aria-label="Republic of Zambia Ministry of Health and National Supply Chain Coordinating Unit logos">
-            <span>Republic of Zambia Ministry of Health | National Supply Chain Coordinating Unit</span>
+          <div className="identity-band" aria-label="Republic of Zambia Ministry of Health and National Supply Chain Coordinating Unit logos">
+            <img src="/supply-chain-performance/assets/moh-logo-lockup.png" alt="Republic of Zambia Ministry of Health" className="moh-logo" />
+            <img src="/supply-chain-performance/assets/nsccu-logo-lockup.png" alt="National Supply Chain Coordinating Unit" className="nsccu-logo" />
           </div>
           <div className="hero-row">
             <div className="hero-copy">
