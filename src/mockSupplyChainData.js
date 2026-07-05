@@ -14,6 +14,7 @@ export const navItems = [
   "Stock Status / MOS",
   "Stock Imbalances",
   "AMC / Consumption Trends",
+  "Order Fill Rate",
   "Provincial Performance",
   "Programme Performance",
   "Facility Level Analysis",

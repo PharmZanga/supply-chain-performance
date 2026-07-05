@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { mockRecords, months, navItems, stockStatuses } from "./mockSupplyChainData.js";
 import { timeliness2025Metadata } from "./timeliness2025Data.js";
 import { reportingStatus2025Metadata, reportingStatus2025NonReporting } from "./reportingStatus2025Data.js";
-import { orderFillRate2025LowFillItems, orderFillRate2025Metadata } from "./orderFillRate2025Data.js";
+import { orderFillRate2025Aggregates, orderFillRate2025LowFillItems, orderFillRate2025Metadata } from "./orderFillRate2025Data.js";
 import "./styles.css";
 
 const pct = (value) => `${Math.round(value)}%`;
@@ -145,6 +145,7 @@ function App() {
         {activePage === "Stock Status / MOS" && <StockStatus {...props} />}
         {activePage === "Stock Imbalances" && <StockImbalances {...props} />}
         {activePage === "AMC / Consumption Trends" && <ConsumptionTrends {...props} />}
+        {activePage === "Order Fill Rate" && <OrderFillRatePage {...props} />}
         {activePage === "Provincial Performance" && <ProvincialPerformance {...props} />}
         {activePage === "Programme Performance" && <ProgrammePerformance {...props} />}
         {activePage === "Facility Level Analysis" && <FacilityLevelAnalysis {...props} />}
@@ -347,6 +348,80 @@ function ConsumptionTrends({ records, filters, setFilters }) {
       <DataTable title="Monthly AMC Table" rows={data} columns={["name", ...selected]} />
     </>
   );
+}
+
+function OrderFillRatePage({ filters, setFilters }) {
+  const sourceRows = orderFillRate2025Aggregates.filter((row) => (
+    (filters.month === "All" || row.month === filters.month) &&
+    (filters.province === "All" || row.province === filters.province) &&
+    (filters.district === "All" || row.district === filters.district)
+  ));
+  const lowFillItems = orderFillRate2025LowFillItems.filter((row) => (
+    (filters.month === "All" || row.month === filters.month) &&
+    (filters.province === "All" || row.province === filters.province) &&
+    (filters.district === "All" || row.district === filters.district) &&
+    (filters.programme === "All" || row.programme === filters.programme) &&
+    (filters.commodity === "All" || row.productName === filters.commodity)
+  ));
+  const totalOrdered = sourceRows.reduce((sum, row) => sum + row.orderedQuantity, 0);
+  const totalShipped = sourceRows.reduce((sum, row) => sum + row.shippedQuantity, 0);
+  const weightedFillRate = totalOrdered ? Math.min(100, (totalShipped / totalOrdered) * 100) : 0;
+  const zeroFillItems = sourceRows.reduce((sum, row) => sum + row.zeroFillItems, 0);
+  const lineItems = sourceRows.reduce((sum, row) => sum + row.lineItems, 0);
+  const overFilledItems = sourceRows.reduce((sum, row) => sum + row.overFilledItems, 0);
+  const monthly = months.map((month) => {
+    const rows = sourceRows.filter((row) => row.month === month);
+    const ordered = rows.reduce((sum, row) => sum + row.orderedQuantity, 0);
+    const shipped = rows.reduce((sum, row) => sum + row.shippedQuantity, 0);
+    return { name: month.slice(0, 3), fillRate: ordered ? Math.min(100, (shipped / ordered) * 100) : 0 };
+  });
+  const provinceRows = summarizeOrderFill(sourceRows, "province");
+  const districtRows = summarizeOrderFill(sourceRows, "district");
+
+  return (
+    <>
+      <section className="source-note">
+        <strong>2025 order fill-rate source loaded:</strong>
+        <span>{orderFillRate2025Metadata.recordCount.toLocaleString()} order lines from {orderFillRate2025Metadata.files.length} monthly exports.</span>
+        <span>{sourceRows.length.toLocaleString()} district-month source rows match the current filters.</span>
+      </section>
+      <section className="kpi-grid">
+        <KpiCard label="Weighted Fill Rate" value={sourceRows.length ? pct(weightedFillRate) : "N/A"} detail="Shipped quantity / ordered quantity" tone={weightedFillRate >= 80 ? "good" : weightedFillRate >= 50 ? "warn" : "danger"} />
+        <KpiCard label="Quantity Ordered" value={Math.round(totalOrdered).toLocaleString()} detail="From source order lines" />
+        <KpiCard label="Quantity Shipped" value={Math.round(totalShipped).toLocaleString()} detail="Fulfilled quantity" />
+        <KpiCard label="Zero-fill Lines" value={zeroFillItems.toLocaleString()} detail={`${lineItems.toLocaleString()} total line items`} tone={zeroFillItems ? "danger" : "good"} />
+        <KpiCard label="Over-filled Lines" value={overFilledItems.toLocaleString()} detail="Shipped above ordered quantity" tone="warn" />
+        <KpiCard label="Facilities Covered" value={orderFillRate2025Metadata.facilityCount.toLocaleString()} detail={`${orderFillRate2025Metadata.productCount} products`} />
+      </section>
+      <section className="dashboard-grid halves">
+        <Panel title="Monthly Order Fill Rate" subtitle="Weighted by ordered and shipped quantity">
+          <LineChart data={monthly} series={[{ key: "fillRate", label: "Fill rate", color: "#0b3a67" }]} />
+        </Panel>
+        <Panel title="Province Ranking" subtitle="Click a province to filter">
+          <BarChart data={provinceRows} valueKey="orderFillRate" onSelect={(item) => setFilters((current) => ({ ...current, province: item.name, district: "All" }))} />
+        </Panel>
+      </section>
+      <Panel title="District Order Fill Rate" subtitle="District-month aggregates from order fill-rate exports">
+        <BarChart data={districtRows} valueKey="orderFillRate" />
+      </Panel>
+      <DataTable title="Low Fill Product Lines" rows={lowFillItems.slice(0, 50)} columns={["province", "district", "facility", "productCode", "productName", "orderedQuantity", "shippedQuantity", "itemFillRate"]} />
+    </>
+  );
+}
+
+function summarizeOrderFill(rows, key) {
+  return Object.entries(groupBy(rows, key)).map(([name, group]) => {
+    const ordered = group.reduce((sum, row) => sum + row.orderedQuantity, 0);
+    const shipped = group.reduce((sum, row) => sum + row.shippedQuantity, 0);
+    return {
+      name,
+      orderFillRate: ordered ? Math.min(100, (shipped / ordered) * 100) : 0,
+      orderedQuantity: ordered,
+      shippedQuantity: shipped,
+      lineItems: group.reduce((sum, row) => sum + row.lineItems, 0),
+      zeroFillItems: group.reduce((sum, row) => sum + row.zeroFillItems, 0),
+    };
+  }).sort((a, b) => b.orderFillRate - a.orderFillRate);
 }
 
 function ProvincialPerformance({ records, setFilters }) {
