@@ -3,10 +3,11 @@ import { createRoot } from "react-dom/client";
 import { mockRecords, months, navItems, stockStatuses } from "./mockSupplyChainData.js";
 import { timeliness2025Metadata } from "./timeliness2025Data.js";
 import { reportingStatus2025Metadata, reportingStatus2025NonReporting } from "./reportingStatus2025Data.js";
-import { orderFillRate2025Aggregates, orderFillRate2025LowFillItems, orderFillRate2025Metadata } from "./orderFillRate2025Data.js";
+import { orderFillRate2025Aggregates, orderFillRate2025LowFillItems, orderFillRate2025Metadata, orderFillRate2025MonthlySummary } from "./orderFillRate2025Data.js";
 import "./styles.css";
 
 const pct = (value) => `${Math.round(value)}%`;
+const pct2 = (value) => `${Number(value).toFixed(2)}%`;
 const oneDec = (value) => Number(value).toFixed(1);
 const avg = (items, key) => {
   const values = items.map((row) => row[key]).filter((value) => typeof value === "number" && Number.isFinite(value));
@@ -28,6 +29,18 @@ function groupBy(records, key) {
     groups[row[key]].push(row);
     return groups;
   }, {});
+}
+
+function orderFillSummary(monthFilter = "All") {
+  const rows = orderFillRate2025MonthlySummary.filter((row) => monthFilter === "All" || row.month === monthFilter);
+  const approvedProducts = rows.reduce((sum, row) => sum + row.approvedProducts, 0);
+  const shippedProducts = rows.reduce((sum, row) => sum + row.shippedProducts, 0);
+  return {
+    rows,
+    approvedProducts,
+    shippedProducts,
+    orderFillRate: approvedProducts ? (shippedProducts / approvedProducts) * 100 : 0,
+  };
 }
 
 function summarize(records, key) {
@@ -177,7 +190,7 @@ function KpiCard({ label, value, detail, tone = "neutral" }) {
 }
 
 function KpiGrid({ records }) {
-  const hasOrderFill = records.some((row) => typeof row.orderFillRate === "number" && Number.isFinite(row.orderFillRate));
+  const nationalOrderFill = orderFillSummary("All");
   return (
     <section className="kpi-grid">
       <KpiCard label="Reporting Completeness" value={pct(avg(records, "reportingCompleteness"))} detail="National average" tone="good" />
@@ -185,7 +198,7 @@ function KpiGrid({ records }) {
       <KpiCard label="Commodity Availability" value={pct(avg(records, "availability"))} detail="Tracer items available" tone={avg(records, "availability") >= 90 ? "good" : "warn"} />
       <KpiCard label="Average MOS" value={oneDec(avg(records, "mos"))} detail="Months of stock" />
       <KpiCard label="Stock-out Rate" value={pct(avg(records, "stockOutRate"))} detail="Facilities with zero balance" tone={avg(records, "stockOutRate") > 10 ? "danger" : "good"} />
-      <KpiCard label="Order Fill Rate" value={hasOrderFill ? pct(avg(records, "orderFillRate")) : "N/A"} detail="Where order data exists" />
+      <KpiCard label="Order Fill Rate" value={pct2(nationalOrderFill.orderFillRate)} detail="Products shipped / approved" />
     </section>
   );
 }
@@ -356,6 +369,7 @@ function OrderFillRatePage({ filters, setFilters }) {
     (filters.province === "All" || row.province === filters.province) &&
     (filters.district === "All" || row.district === filters.district)
   ));
+  const officialSummary = orderFillSummary(filters.month);
   const lowFillItems = orderFillRate2025LowFillItems.filter((row) => (
     (filters.month === "All" || row.month === filters.month) &&
     (filters.province === "All" || row.province === filters.province) &&
@@ -363,18 +377,10 @@ function OrderFillRatePage({ filters, setFilters }) {
     (filters.programme === "All" || row.programme === filters.programme) &&
     (filters.commodity === "All" || row.productName === filters.commodity)
   ));
-  const totalOrdered = sourceRows.reduce((sum, row) => sum + row.orderedQuantity, 0);
-  const totalShipped = sourceRows.reduce((sum, row) => sum + row.shippedQuantity, 0);
-  const weightedFillRate = totalOrdered ? Math.min(100, (totalShipped / totalOrdered) * 100) : 0;
   const zeroFillItems = sourceRows.reduce((sum, row) => sum + row.zeroFillItems, 0);
   const lineItems = sourceRows.reduce((sum, row) => sum + row.lineItems, 0);
   const overFilledItems = sourceRows.reduce((sum, row) => sum + row.overFilledItems, 0);
-  const monthly = months.map((month) => {
-    const rows = sourceRows.filter((row) => row.month === month);
-    const ordered = rows.reduce((sum, row) => sum + row.orderedQuantity, 0);
-    const shipped = rows.reduce((sum, row) => sum + row.shippedQuantity, 0);
-    return { name: month.slice(0, 3), fillRate: ordered ? Math.min(100, (shipped / ordered) * 100) : 0 };
-  });
+  const monthly = orderFillRate2025MonthlySummary.map((row) => ({ name: row.month.slice(0, 3), fillRate: row.orderFillRate }));
   const provinceRows = summarizeOrderFill(sourceRows, "province");
   const districtRows = summarizeOrderFill(sourceRows, "district");
 
@@ -382,20 +388,20 @@ function OrderFillRatePage({ filters, setFilters }) {
     <>
       <section className="source-note">
         <strong>2025 order fill-rate source loaded:</strong>
-        <span>{orderFillRate2025Metadata.recordCount.toLocaleString()} order lines from {orderFillRate2025Metadata.files.length} monthly exports.</span>
-        <span>{sourceRows.length.toLocaleString()} district-month source rows match the current filters.</span>
+        <span>Official screenshot totals loaded for {officialSummary.rows.length} month(s): {officialSummary.shippedProducts.toLocaleString()} shipped out of {officialSummary.approvedProducts.toLocaleString()} approved.</span>
+        <span>{orderFillRate2025Metadata.recordCount.toLocaleString()} exported product lines remain available for drilldown.</span>
       </section>
       <section className="kpi-grid">
-        <KpiCard label="Weighted Fill Rate" value={sourceRows.length ? pct(weightedFillRate) : "N/A"} detail="Shipped quantity / ordered quantity" tone={weightedFillRate >= 80 ? "good" : weightedFillRate >= 50 ? "warn" : "danger"} />
-        <KpiCard label="Quantity Ordered" value={Math.round(totalOrdered).toLocaleString()} detail="From source order lines" />
-        <KpiCard label="Quantity Shipped" value={Math.round(totalShipped).toLocaleString()} detail="Fulfilled quantity" />
+        <KpiCard label="Order Fill Rate" value={pct2(officialSummary.orderFillRate)} detail="Products shipped / approved" tone={officialSummary.orderFillRate >= 80 ? "good" : officialSummary.orderFillRate >= 50 ? "warn" : "danger"} />
+        <KpiCard label="Products Approved" value={officialSummary.approvedProducts.toLocaleString()} detail="Official source total" />
+        <KpiCard label="Products Shipped" value={officialSummary.shippedProducts.toLocaleString()} detail="Official source total" />
         <KpiCard label="Zero-fill Lines" value={zeroFillItems.toLocaleString()} detail={`${lineItems.toLocaleString()} total line items`} tone={zeroFillItems ? "danger" : "good"} />
         <KpiCard label="Over-filled Lines" value={overFilledItems.toLocaleString()} detail="Shipped above ordered quantity" tone="warn" />
         <KpiCard label="Facilities Covered" value={orderFillRate2025Metadata.facilityCount.toLocaleString()} detail={`${orderFillRate2025Metadata.productCount} products`} />
       </section>
       <section className="dashboard-grid halves">
-        <Panel title="Monthly Order Fill Rate" subtitle="Weighted by ordered and shipped quantity">
-          <LineChart data={monthly} series={[{ key: "fillRate", label: "Fill rate", color: "#0b3a67" }]} />
+        <Panel title="Monthly Order Fill Rate" subtitle="Official percentage from screenshot summaries">
+          <LineChart data={monthly} series={[{ key: "fillRate", label: "Fill rate", color: "#0b3a67" }]} maxValue={2} />
         </Panel>
         <Panel title="Province Ranking" subtitle="Click a province to filter">
           <BarChart data={provinceRows} valueKey="orderFillRate" onSelect={(item) => setFilters((current) => ({ ...current, province: item.name, district: "All" }))} />
@@ -441,6 +447,7 @@ function ProvincialPerformance({ records, setFilters }) {
 
 function ProgrammePerformance({ records, filters }) {
   const rows = summarize(records, "programme");
+  const officialOrderFill = orderFillSummary(filters.month);
   const lowFillItems = orderFillRate2025LowFillItems.filter((row) => (
     (filters.month === "All" || row.month === filters.month) &&
     (filters.province === "All" || row.province === filters.province) &&
@@ -453,7 +460,7 @@ function ProgrammePerformance({ records, filters }) {
       <section className="source-note">
         <strong>2025 order fill-rate source loaded:</strong>
         <span>{orderFillRate2025Metadata.recordCount.toLocaleString()} order lines from {orderFillRate2025Metadata.files.length} monthly exports, covering {orderFillRate2025Metadata.facilityCount} facilities and {orderFillRate2025Metadata.productCount} products.</span>
-        <span>Weighted order fill rate: {pct(orderFillRate2025Metadata.orderFillRate)} from {Math.round(orderFillRate2025Metadata.shippedQuantity).toLocaleString()} shipped out of {Math.round(orderFillRate2025Metadata.orderedQuantity).toLocaleString()} ordered.</span>
+        <span>Official order fill rate: {pct2(officialOrderFill.orderFillRate)} from {officialOrderFill.shippedProducts.toLocaleString()} shipped out of {officialOrderFill.approvedProducts.toLocaleString()} approved.</span>
       </section>
       <Panel title="Programme Composite Score" subtitle="Programme comparison across core supply chain indicators">
         <BarChart data={rows} valueKey="score" />
@@ -553,7 +560,7 @@ function BarChart({ data, valueKey, maxValue = 100, onSelect }) {
         <button key={row.name} className="bar-row" onClick={() => onSelect?.(row)}>
           <span>{row.name}</span>
           <div className="bar-track"><div className={toneClass(row[valueKey])} style={{ width: `${Math.max(3, ((row[valueKey] || 0) / max) * 100)}%` }} /></div>
-          <strong>{valueKey === "mos" ? oneDec(row[valueKey]) : pct(row[valueKey])}</strong>
+          <strong>{valueKey === "mos" ? oneDec(row[valueKey]) : valueKey === "orderFillRate" ? pct2(row[valueKey]) : pct(row[valueKey])}</strong>
         </button>
       ))}
     </div>
