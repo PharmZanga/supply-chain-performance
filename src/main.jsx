@@ -405,30 +405,35 @@ function StockStatus({ records }) {
 }
 
 function StockImbalances({ records }) {
-  const distribution = statusDistribution(records);
-  const provinces = Object.entries(groupBy(records, "province")).map(([name, rows]) => ({ name, ...Object.fromEntries(statusDistribution(rows).map((item) => [item.name, item.percent])) }));
   const imbalanceCategories = [
     "ACCORDING TO PLAN(2-4 MOS)",
+    "EMERGENCY LEVELS(<=0.5 MOS)",
     "OVERSTOCKED(>=12 MOS)",
     "OVERSTOCKED(4-12 MOS)",
-    "EMERGENCY LEVELS(<=0.5 MOS)",
-    "UNDERSTOCKED(0.5-2 MOS)",
     "STOCKED OUT",
+    "UNDERSTOCKED(0.5-2 MOS)",
   ];
+  const provinces = trueProvincialImbalances();
   const quarterly = trueQuarterlyImbalances();
+  const distribution = imbalanceCategories.map((category) => ({
+    name: category,
+    value: provinces.at(-1)[category],
+    percent: provinces.at(-1)[category],
+  }));
   return (
     <>
       <section className="dashboard-grid halves">
-        <Panel title="Stock Status Distribution" subtitle="Percentage of stock balance categories">
+        <Panel title="Stock Status Distribution" subtitle="True national imbalance distribution">
           <Donut data={distribution} />
         </Panel>
-        <Panel title="Category Share" subtitle="Filtered comparison">
+        <Panel title="Category Share" subtitle="Grand Total from source pivot">
           <RankList rows={distribution} valueKey="percent" />
         </Panel>
       </section>
-      <Panel title="Stacked Province Comparison" subtitle="Stock status percentage by province">
-        <StackedBars data={provinces} keys={stockStatuses} />
+      <Panel title="Stacked Province Comparison" subtitle="True stock status percentage by province">
+        <StackedBars data={provinces} keys={imbalanceCategories} normalize />
       </Panel>
+      <DataTable title="Provincial Imbalance Percentages" rows={provinces} columns={["name", ...imbalanceCategories]} />
       <Panel title="Quarterly Imbalance Trend" subtitle="True Q1-Q4 imbalance percentages from the source chart">
         <StackedBars data={quarterly} keys={imbalanceCategories} normalize />
       </Panel>
@@ -437,22 +442,47 @@ function StockImbalances({ records }) {
   );
 }
 
-function trueQuarterlyImbalances() {
+function trueProvincialImbalances() {
   const rows = [
-    ["Q1", 7.24, 3.95, 7.45, 4.02, 9.84, 5.38, "Actual"],
-    ["Q2", 7.60, 4.39, 7.72, 4.54, 10.49, 6.04, "Actual"],
-    ["Q3", 3.85, 2.33, 3.84, 2.43, 5.71, 3.18, "Actual"],
-    ["Q4", 2.84, 1.94, 2.73, 2.07, 4.55, 2.67, "Actual"],
-    ["Grand Total", 18.69, 10.67, 19.01, 10.99, 26.04, 14.60, "Overall"],
+    ["Central Province", 21.7, 8.1, 11.1, 22.2, 10.5, 26.3],
+    ["Copperbelt Province", 18.1, 13.4, 7.8, 15.7, 17.5, 27.4],
+    ["Eastern Province", 21.2, 11.3, 7.2, 17.4, 11.7, 31.1],
+    ["Luapula Province", 17.8, 10.8, 9.5, 17.5, 18.0, 26.5],
+    ["Lusaka Province", 15.8, 11.7, 9.1, 17.2, 22.1, 24.1],
+    ["Muchinga Province", 19.4, 9.3, 10.1, 20.6, 17.7, 22.9],
+    ["Northern Province", 14.9, 13.6, 9.4, 17.1, 18.9, 26.0],
+    ["North-Western Province", 18.7, 8.2, 14.4, 21.5, 15.4, 21.8],
+    ["Southern Province", 17.5, 13.2, 9.3, 17.5, 16.5, 26.0],
+    ["Western Province", 17.7, 9.7, 12.8, 20.6, 17.8, 21.5],
+    ["Grand Total", 18.3, 11.2, 9.9, 18.5, 16.4, 25.8],
   ];
-  return rows.map(([name, according, over12, over4to12, emergency, understocked, stockedOut, basis]) => ({
+  return rows.map(([name, according, emergency, over12, over4to12, stockedOut, understocked]) => ({
     name,
     "ACCORDING TO PLAN(2-4 MOS)": according,
+    "EMERGENCY LEVELS(<=0.5 MOS)": emergency,
     "OVERSTOCKED(>=12 MOS)": over12,
     "OVERSTOCKED(4-12 MOS)": over4to12,
-    "EMERGENCY LEVELS(<=0.5 MOS)": emergency,
-    "UNDERSTOCKED(0.5-2 MOS)": understocked,
     "STOCKED OUT": stockedOut,
+    "UNDERSTOCKED(0.5-2 MOS)": understocked,
+  }));
+}
+
+function trueQuarterlyImbalances() {
+  const rows = [
+    ["Q1", 7.24, 4.02, 3.95, 7.45, 5.38, 9.84, "Actual"],
+    ["Q2", 7.60, 4.54, 4.39, 7.72, 6.04, 10.49, "Actual"],
+    ["Q3", 3.85, 2.43, 2.33, 3.84, 3.18, 5.71, "Actual"],
+    ["Q4", 2.84, 2.07, 1.94, 2.73, 2.67, 4.55, "Actual"],
+    ["Grand Total", 18.69, 10.99, 10.67, 19.01, 14.60, 26.04, "Overall"],
+  ];
+  return rows.map(([name, according, emergency, over12, over4to12, stockedOut, understocked, basis]) => ({
+    name,
+    "ACCORDING TO PLAN(2-4 MOS)": according,
+    "EMERGENCY LEVELS(<=0.5 MOS)": emergency,
+    "OVERSTOCKED(>=12 MOS)": over12,
+    "OVERSTOCKED(4-12 MOS)": over4to12,
+    "STOCKED OUT": stockedOut,
+    "UNDERSTOCKED(0.5-2 MOS)": understocked,
     basis,
   }));
 }
