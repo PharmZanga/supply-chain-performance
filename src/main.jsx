@@ -407,6 +407,7 @@ function StockStatus({ records }) {
 function StockImbalances({ records }) {
   const distribution = statusDistribution(records);
   const provinces = Object.entries(groupBy(records, "province")).map(([name, rows]) => ({ name, ...Object.fromEntries(statusDistribution(rows).map((item) => [item.name, item.percent])) }));
+  const quarterly = quarterlyStatusDistribution(records);
   return (
     <>
       <section className="dashboard-grid halves">
@@ -420,8 +421,40 @@ function StockImbalances({ records }) {
       <Panel title="Stacked Province Comparison" subtitle="Stock status percentage by province">
         <StackedBars data={provinces} keys={stockStatuses} />
       </Panel>
+      <Panel title="Quarterly Imbalance Trend" subtitle="Q4 extrapolated from Q1-Q3 category trends">
+        <StackedBars data={quarterly} keys={stockStatuses} />
+      </Panel>
+      <DataTable title="Quarterly Imbalance Percentages" rows={quarterly} columns={["name", "According to Plan", "Understock", "Emergency", "Stock-out", "Overstock", "Excess", "basis"]} />
     </>
   );
+}
+
+function quarterlyStatusDistribution(records) {
+  const quarterMonths = [
+    ["January", "February", "March"],
+    ["April", "May", "June"],
+    ["July", "August", "September"],
+  ];
+  const quarters = quarterMonths.map((quarter, index) => {
+    const rows = records.filter((row) => quarter.includes(row.month));
+    return {
+      name: `Q${index + 1}`,
+      basis: "Actual",
+      ...Object.fromEntries(statusDistribution(rows).map((item) => [item.name, item.percent])),
+    };
+  });
+  const projection = { name: "Q4", basis: "Extrapolated" };
+  stockStatuses.forEach((status) => {
+    const values = quarters.map((quarter) => quarter[status] || 0);
+    const recentSlope = values[2] - values[1];
+    const fullTrend = (values[2] - values[0]) / 2;
+    projection[status] = Math.max(0, values[2] + (recentSlope * 0.65 + fullTrend * 0.35));
+  });
+  const total = stockStatuses.reduce((sum, status) => sum + projection[status], 0) || 1;
+  stockStatuses.forEach((status) => {
+    projection[status] = (projection[status] / total) * 100;
+  });
+  return [...quarters, projection];
 }
 
 function ConsumptionTrends({ records, filters, setFilters }) {
@@ -734,7 +767,7 @@ function DataTable({ title, rows, columns }) {
           <tbody>
             {rows.map((row, index) => (
               <tr key={`${row.name || row.facility || row.province}-${index}`}>
-                {columns.map((column) => <td key={column}>{formatCell(row[column])}</td>)}
+                {columns.map((column) => <td key={column}>{formatCell(row[column], column)}</td>)}
               </tr>
             ))}
           </tbody>
@@ -748,8 +781,9 @@ function labelize(value) {
   return value.replace(/([A-Z])/g, " $1").replace(/^./, (char) => char.toUpperCase());
 }
 
-function formatCell(value) {
+function formatCell(value, column) {
   if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (stockStatuses.includes(column)) return pct(value);
   if (typeof value === "number") return value > 12 ? Math.round(value).toLocaleString() : oneDec(value);
   return value ?? "N/A";
 }
