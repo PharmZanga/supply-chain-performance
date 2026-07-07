@@ -2,7 +2,7 @@ import React, { useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { mockRecords, months, navItems, stockStatuses } from "./mockSupplyChainData.js";
 import { timeliness2025Metadata } from "./timeliness2025Data.js";
-import { reportingStatus2025Metadata, reportingStatus2025NonReporting } from "./reportingStatus2025Data.js";
+import { reportingStatus2025Aggregates, reportingStatus2025Metadata, reportingStatus2025NonReporting } from "./reportingStatus2025Data.js";
 import { orderFillRate2025Aggregates, orderFillRate2025LowFillItems, orderFillRate2025Metadata, orderFillRate2025MonthlySummary } from "./orderFillRate2025Data.js";
 import "./styles.css";
 
@@ -154,6 +154,7 @@ function App() {
 
         {activePage === "Executive Summary" && <ExecutiveSummary {...props} />}
         {activePage === "Reporting Performance" && <ReportingPerformance {...props} />}
+        {activePage === "Reporting Status" && <ReportingStatusPage {...props} />}
         {activePage === "Commodity Availability" && <CommodityAvailability {...props} />}
         {activePage === "Stock Status / MOS" && <StockStatus {...props} />}
         {activePage === "Stock Imbalances" && <StockImbalances {...props} />}
@@ -267,6 +268,97 @@ function ReportingPerformance({ records, filters, setFilters }) {
       <DataTable title="District Reporting Ranking" rows={districts.slice(0, 12)} columns={["name", "reportingCompleteness", "reportingTimeliness", "records"]} />
     </>
   );
+}
+
+function ReportingStatusPage({ filters, setFilters }) {
+  const sourceRows = reportingStatus2025Aggregates.filter((row) => (
+    (filters.month === "All" || row.month === filters.month) &&
+    (filters.province === "All" || row.province === filters.province) &&
+    (filters.district === "All" || row.district === filters.district)
+  ));
+  const nonReportingRows = reportingStatus2025NonReporting.filter((row) => (
+    (filters.month === "All" || row.month === filters.month) &&
+    (filters.province === "All" || row.province === filters.province) &&
+    (filters.district === "All" || row.district === filters.district) &&
+    (filters.facilityLevel === "All" || row.facilityLevel === filters.facilityLevel)
+  ));
+  const totals = summarizeReportingStatus(sourceRows);
+  const monthly = months.map((month) => {
+    const rows = sourceRows.filter((row) => row.month === month);
+    const monthTotals = summarizeReportingStatus(rows);
+    return { name: month.slice(0, 3), completeness: monthTotals.completeness };
+  });
+  const provinceRows = summarizeReportingStatusBy(sourceRows, "province");
+  const districtRows = summarizeReportingStatusBy(sourceRows, "district");
+  const statusData = Object.entries(totals.statusCounts).map(([name, value]) => ({
+    name,
+    value,
+    percent: totals.expected ? (value / totals.expected) * 100 : 0,
+  }));
+
+  return (
+    <>
+      <section className="source-note">
+        <strong>2025 reporting status source loaded:</strong>
+        <span>{reportingStatus2025Metadata.recordCount.toLocaleString()} facility status rows from {reportingStatus2025Metadata.files.length} monthly exports.</span>
+        <span>{sourceRows.length.toLocaleString()} district-month rows match the current filters.</span>
+      </section>
+      <section className="kpi-grid">
+        <KpiCard label="Reporting Completeness" value={pct(totals.completeness)} detail="Reported / expected facility reports" tone={totals.completeness >= 90 ? "good" : totals.completeness >= 80 ? "warn" : "danger"} />
+        <KpiCard label="Expected Reports" value={totals.expected.toLocaleString()} detail="Facility reporting obligations" />
+        <KpiCard label="Reported" value={totals.reported.toLocaleString()} detail="All statuses except non-reporting" tone="good" />
+        <KpiCard label="Non-reporting" value={totals.nonReporting.toLocaleString()} detail="Facilities without report" tone={totals.nonReporting ? "danger" : "good"} />
+        <KpiCard label="In Approval" value={(totals.statusCounts.IN_APPROVAL || 0).toLocaleString()} detail="Submitted, awaiting approval" tone="warn" />
+        <KpiCard label="Released" value={(totals.statusCounts.RELEASED || 0).toLocaleString()} detail="Released reports" tone="good" />
+      </section>
+      <section className="dashboard-grid halves">
+        <Panel title="Monthly Reporting Completeness" subtitle="Reporting status by period">
+          <LineChart data={monthly} series={[{ key: "completeness", label: "Completeness", color: "#0d7a53" }]} />
+        </Panel>
+        <Panel title="Reporting Status Distribution" subtitle="Facility report workflow status">
+          <Donut data={statusData} />
+        </Panel>
+      </section>
+      <Panel title="Province Reporting Completeness" subtitle="Click a province to filter districts">
+        <BarChart data={provinceRows} valueKey="reportingCompleteness" onSelect={(item) => setFilters((current) => ({ ...current, province: item.name, district: "All" }))} />
+      </Panel>
+      <DataTable title="District Reporting Status Summary" rows={districtRows.slice(0, 40)} columns={["name", "reportingCompleteness", "expected", "reported", "nonReporting"]} />
+      <DataTable title="Non-reporting Facilities" rows={nonReportingRows.slice(0, 60)} columns={["province", "district", "facilityCode", "facility", "facilityLevel", "programme", "month", "status"]} />
+    </>
+  );
+}
+
+function summarizeReportingStatus(rows) {
+  const expected = rows.reduce((sum, row) => sum + row.expected, 0);
+  const reported = rows.reduce((sum, row) => sum + row.reported, 0);
+  const nonReporting = rows.reduce((sum, row) => sum + row.nonReporting, 0);
+  const statusCounts = rows.reduce((counts, row) => {
+    Object.entries(row.statusCounts || {}).forEach(([status, count]) => {
+      counts[status] = (counts[status] || 0) + count;
+    });
+    return counts;
+  }, {});
+  return {
+    expected,
+    reported,
+    nonReporting,
+    statusCounts,
+    completeness: expected ? (reported / expected) * 100 : 0,
+  };
+}
+
+function summarizeReportingStatusBy(rows, key) {
+  return Object.entries(groupBy(rows, key)).map(([name, group]) => {
+    const totals = summarizeReportingStatus(group);
+    return {
+      name,
+      reportingCompleteness: totals.completeness,
+      expected: totals.expected,
+      reported: totals.reported,
+      nonReporting: totals.nonReporting,
+      records: group.length,
+    };
+  }).sort((a, b) => b.reportingCompleteness - a.reportingCompleteness);
 }
 
 function CommodityAvailability({ records }) {

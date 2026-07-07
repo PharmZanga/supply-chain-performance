@@ -10,6 +10,7 @@ export const months = [
 export const navItems = [
   "Executive Summary",
   "Reporting Performance",
+  "Reporting Status",
   "Commodity Availability",
   "Stock Status / MOS",
   "Stock Imbalances",
