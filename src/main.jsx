@@ -407,7 +407,15 @@ function StockStatus({ records }) {
 function StockImbalances({ records }) {
   const distribution = statusDistribution(records);
   const provinces = Object.entries(groupBy(records, "province")).map(([name, rows]) => ({ name, ...Object.fromEntries(statusDistribution(rows).map((item) => [item.name, item.percent])) }));
-  const quarterly = quarterlyStatusDistribution(records);
+  const imbalanceCategories = [
+    "ACCORDING TO PLAN(2-4 MOS)",
+    "OVERSTOCKED(>=12 MOS)",
+    "OVERSTOCKED(4-12 MOS)",
+    "EMERGENCY LEVELS(<=0.5 MOS)",
+    "UNDERSTOCKED(0.5-2 MOS)",
+    "STOCKED OUT",
+  ];
+  const quarterly = trueQuarterlyImbalances();
   return (
     <>
       <section className="dashboard-grid halves">
@@ -421,40 +429,32 @@ function StockImbalances({ records }) {
       <Panel title="Stacked Province Comparison" subtitle="Stock status percentage by province">
         <StackedBars data={provinces} keys={stockStatuses} />
       </Panel>
-      <Panel title="Quarterly Imbalance Trend" subtitle="Q4 extrapolated from Q1-Q3 category trends">
-        <StackedBars data={quarterly} keys={stockStatuses} />
+      <Panel title="Quarterly Imbalance Trend" subtitle="True Q1-Q4 imbalance percentages from the source chart">
+        <StackedBars data={quarterly} keys={imbalanceCategories} normalize />
       </Panel>
-      <DataTable title="Quarterly Imbalance Percentages" rows={quarterly} columns={["name", "According to Plan", "Understock", "Emergency", "Stock-out", "Overstock", "Excess", "basis"]} />
+      <DataTable title="Quarterly Imbalance Percentages" rows={quarterly} columns={["name", ...imbalanceCategories, "basis"]} />
     </>
   );
 }
 
-function quarterlyStatusDistribution(records) {
-  const quarterMonths = [
-    ["January", "February", "March"],
-    ["April", "May", "June"],
-    ["July", "August", "September"],
+function trueQuarterlyImbalances() {
+  const rows = [
+    ["Q1", 7.24, 3.95, 7.45, 4.02, 9.84, 5.38, "Actual"],
+    ["Q2", 7.60, 4.39, 7.72, 4.54, 10.49, 6.04, "Actual"],
+    ["Q3", 3.85, 2.33, 3.84, 2.43, 5.71, 3.18, "Actual"],
+    ["Q4", 2.84, 1.94, 2.73, 2.07, 4.55, 2.67, "Actual"],
+    ["Grand Total", 18.69, 10.67, 19.01, 10.99, 26.04, 14.60, "Overall"],
   ];
-  const quarters = quarterMonths.map((quarter, index) => {
-    const rows = records.filter((row) => quarter.includes(row.month));
-    return {
-      name: `Q${index + 1}`,
-      basis: "Actual",
-      ...Object.fromEntries(statusDistribution(rows).map((item) => [item.name, item.percent])),
-    };
-  });
-  const projection = { name: "Q4", basis: "Extrapolated" };
-  stockStatuses.forEach((status) => {
-    const values = quarters.map((quarter) => quarter[status] || 0);
-    const recentSlope = values[2] - values[1];
-    const fullTrend = (values[2] - values[0]) / 2;
-    projection[status] = Math.max(0, values[2] + (recentSlope * 0.65 + fullTrend * 0.35));
-  });
-  const total = stockStatuses.reduce((sum, status) => sum + projection[status], 0) || 1;
-  stockStatuses.forEach((status) => {
-    projection[status] = (projection[status] / total) * 100;
-  });
-  return [...quarters, projection];
+  return rows.map(([name, according, over12, over4to12, emergency, understocked, stockedOut, basis]) => ({
+    name,
+    "ACCORDING TO PLAN(2-4 MOS)": according,
+    "OVERSTOCKED(>=12 MOS)": over12,
+    "OVERSTOCKED(4-12 MOS)": over4to12,
+    "EMERGENCY LEVELS(<=0.5 MOS)": emergency,
+    "UNDERSTOCKED(0.5-2 MOS)": understocked,
+    "STOCKED OUT": stockedOut,
+    basis,
+  }));
 }
 
 function ConsumptionTrends({ records, filters, setFilters }) {
@@ -692,14 +692,18 @@ function BarChart({ data, valueKey, maxValue = 100, onSelect }) {
   );
 }
 
-function StackedBars({ data, keys }) {
+function StackedBars({ data, keys, normalize = false }) {
   return (
     <div className="stacked-bars">
       {data.map((row) => (
         <div className="stacked-row" key={row.name}>
           <span>{row.name}</span>
           <div className="stack">
-            {keys.map((key) => <i key={key} className={`status-${key.toLowerCase().replaceAll(" ", "-")}`} style={{ width: `${row[key] || 0}%` }} title={`${key}: ${oneDec(row[key] || 0)}%`} />)}
+            {keys.map((key) => {
+              const total = keys.reduce((sum, item) => sum + (row[item] || 0), 0) || 1;
+              const width = normalize ? ((row[key] || 0) / total) * 100 : row[key] || 0;
+              return <i key={key} style={{ width: `${width}%`, background: statusColor(key) }} title={`${key}: ${oneDec(row[key] || 0)}%`} />;
+            })}
           </div>
         </div>
       ))}
@@ -783,7 +787,7 @@ function labelize(value) {
 
 function formatCell(value, column) {
   if (typeof value === "boolean") return value ? "Yes" : "No";
-  if (stockStatuses.includes(column)) return pct(value);
+  if (stockStatuses.includes(column) || column.includes("MOS") || column === "STOCKED OUT") return pct(value);
   if (typeof value === "number") return value > 12 ? Math.round(value).toLocaleString() : oneDec(value);
   return value ?? "N/A";
 }
@@ -802,6 +806,12 @@ function statusColor(status) {
     "Stock-out": "#b83232",
     Overstock: "#3478a6",
     Excess: "#6b7280",
+    "ACCORDING TO PLAN(2-4 MOS)": "#41cf55",
+    "OVERSTOCKED(>=12 MOS)": "#f2f500",
+    "OVERSTOCKED(4-12 MOS)": "#cc62c9",
+    "EMERGENCY LEVELS(<=0.5 MOS)": "#72bce4",
+    "UNDERSTOCKED(0.5-2 MOS)": "#f4c0a6",
+    "STOCKED OUT": "#ff0000",
   }[status] || "#0b3a67";
 }
 
